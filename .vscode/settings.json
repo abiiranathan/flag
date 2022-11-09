@@ -1,0 +1,9 @@
+{
+  "C_Cpp.codeAnalysis.clangTidy.checks.disabled": [
+    "clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling",
+    "google-readability-braces-around-statements",
+    "misc-definitions-in-headers",
+    "google-readability-casting",
+    "performance-no-int-to-ptr"
+  ]
+}
