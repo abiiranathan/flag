@@ -15,12 +15,7 @@ this case, the last value will overwrite the previous ones.
 The package also supports subcommands. Subcommands are specified by
 providing a subcommand struct to the parse_flags function. The subcommand
 struct contains a name, description, callback and flags. Only one subcommand
-may be specified at a time. When a subcommand is encountered, all flags after
-it are parsed into the subcommand's flag array. The callback is then called
-with the subcommand's flags and the global flag context.
-
-This means that the subcommand may be called before all flags are parsed.
-That means global flags must come before subcommands.
+may be specified at a time and is assumed to be the 2nd argument. i.e argv[1]
 */
 
 #ifndef __FLAG_H__
@@ -81,6 +76,13 @@ typedef struct flag_ctx {
   int num_flags;         // Number of flags stored.
 } flag_ctx;
 
+// subcommand handler arguments.
+typedef struct FlagArgs {
+  flag* flags;    // subcommand flags
+  int num_flags;  // number of flags
+  flag_ctx* ctx;  // global ctx(to access other global flags)
+} FlagArgs;
+
 // Subcommand struct.
 typedef struct subcommand {
   const char* name;         // name of the subcommand.
@@ -88,7 +90,7 @@ typedef struct subcommand {
 
   // optional callback. Called automatically with flags, num_flags and global flag context.
   // when done parsing it's flags.
-  void (*callback)(flag* flags, int num_flags, flag_ctx* ctx);
+  void (*callback)(FlagArgs args);
   flag* flags;    // flags for this subcommand.
   int num_flags;  // number of flags for this subcommand.
 } subcommand;
@@ -116,7 +118,11 @@ void flag_destroy_context(flag_ctx* ctx);
 // overflow checks and calling subcommand callbacks.
 // Optional subcommand array (subcommand *) may be passed to parse subcommands
 // followed the number of subcommands(int).
-void parse_flags(flag_ctx* ctx, int argc, char* argv[], ...);
+//
+// Returns a ptr to the matching subcommand(or NULL if no subcommands) that can invoked with
+// the function subcommand_call.
+subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[], subcommand* subcommands,
+                        size_t num_subcommands);
 
 // Extract value of the flag by name given an array of flags.
 // Return a pointer to the value or NULL if not found.
@@ -124,6 +130,10 @@ void* flag_value(flag* flags, int num_flags, const char* name);
 
 // Get value from global flag context.
 void* flag_value_ctx(flag_ctx* ctx, const char* name);
+
+
+// Invoke the subcommand callback.
+void subcommand_call(subcommand* subcmd, flag_ctx* ctx);
 
 // Print help message for flags in flag context.
 // Does not exit the program automatically.
@@ -136,7 +146,7 @@ void print_help(flag_ctx* ctx, char** argv);
 // Initialize a flag context
 flag_ctx flag_create_context(size_t flag_capacity) {
   flag_ctx ctx = {0};
-  ctx.flags = malloc(sizeof(flag) * flag_capacity);
+  ctx.flags = (flag*)malloc(sizeof(flag) * flag_capacity);
   if (ctx.flags == NULL) {
     fprintf(stderr, "Error: Failed to allocate memory for flags\n");
     exit(EXIT_FAILURE);
@@ -245,6 +255,18 @@ void* flag_value_ctx(flag_ctx* ctx, const char* name) {
     }
   }
   return NULL;
+}
+
+// Invoke the subcommand callback.
+void subcommand_call(subcommand* subcmd, flag_ctx* ctx) {
+  if (subcmd == NULL || ctx == NULL)
+    return;
+
+  // Once we are done. We call the subcommand callback.
+  if (subcmd->callback != NULL) {
+    subcmd->callback(
+      (FlagArgs){.flags = subcmd->flags, .num_flags = subcmd->num_flags, .ctx = ctx});
+  }
 }
 
 void parse_subcommand_flag(flag* flag, char* arg) {
@@ -529,19 +551,18 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** a
 }
 
 // Parse command line arguments and set flag values
-void parse_flags(flag_ctx* ctx, int argc, char* argv[], ...) {
-  subcommand* subcommands = NULL;
-  int num_subcommands = 0;
+subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[], subcommand* subcommands,
+                        size_t num_subcommands) {
+  if (argc < 2) {
+    return NULL;  // no subcommands or arguments
+  }
 
-  va_list args;
-  va_start(args, argv);
+  // Loop over all arguments in 2 passes.
+  // The first pass handles global flags.
+  // The second pass handles subcommands.
+  int subcmdIndex = -1;
+  subcommand* subcmd = NULL;
 
-  // parse Subcommands and num_subcommands from args
-  subcommands = va_arg(args, subcommand*);
-  num_subcommands = va_arg(args, int);
-  va_end(args);
-
-  // loop over all arguments
   for (int i = 1; i < argc; i++) {
     if (argv[i][0] == '-') {
       const char* flag_name = (argv[i][1] == '-') ? &argv[i][2] : &argv[i][1];
@@ -554,49 +575,45 @@ void parse_flags(flag_ctx* ctx, int argc, char* argv[], ...) {
 
       parse_flag_helper(ctx->flags, ctx->num_flags, &i, argc, argv);
     } else {
-      if (subcommands == NULL || num_subcommands == 0) {
-        // We don't have any subcommands, so we just continue
+      // check if this is a subcommand
+      if (!subcommands || num_subcommands == 0) {
         continue;
       }
 
-      // Read subcommand name
-      const char* subcmdName = &argv[i][0];
-      subcommand* subcmd = find_subcommand(subcommands, num_subcommands, subcmdName);
-      if (subcmd == NULL) {
-        continue;
-      }
-
-      i++;  // skip the subcommand name
-
-      // Once we process a subcommand, we assume all next arguments
-      // belong to it.
-      while (i < argc) {
-        // Read flags to next subcommand.
-        // next 2 values are flag and flag value.
-        // find flag index matching next flag.
-        char* arg = argv[i][0] == '-' ? &argv[i][1] : &argv[i][0];
-        flag* flag = NULL;
-
-        // find flag index matching next flag.
-        for (size_t j = 0; j < subcmd->num_flags; j++) {
-          if (strcmp(subcmd->flags[j].name, arg) == 0) {
-            flag = &subcmd->flags[j];
-            break;
-          }
-        }
-
-        ++i;  // increment i to process next argument(value).
-        if (flag != NULL) {
-          parse_subcommand_flag(flag, argv[i]);
-        }
-      }
-
-      // Once we are done. We call the subcommand callback.
-      if (subcmd->callback != NULL) {
-        subcmd->callback(subcmd->flags, subcmd->num_flags, ctx);
+      // Find subcommand matching current argument.
+      subcmd = find_subcommand(subcommands, num_subcommands, &argv[i][0]);
+      if (subcmd) {
+        subcmdIndex = i;
+        break;  // stop processing global flags.
       }
     }
   }
+
+
+  // Handle subcommand if it was found.
+  if (!subcmd) {
+    return NULL;
+  }
+
+  ++subcmdIndex;  // start after subcommand and continue up to argc
+  while (subcmdIndex < argc) {
+    char* arg = argv[subcmdIndex][0] == '-' ? &argv[subcmdIndex][1] : &argv[subcmdIndex][0];
+    flag* flag = NULL;
+
+    // find flag index matching next flag.
+    for (size_t j = 0; j < subcmd->num_flags; j++) {
+      if (strcmp(subcmd->flags[j].name, arg) == 0) {
+        flag = &subcmd->flags[j];
+        break;
+      }
+    }
+
+    ++subcmdIndex;  // increment i to process next argument(value).
+    if (flag != NULL) {
+      parse_subcommand_flag(flag, argv[subcmdIndex]);
+    }
+  }
+  return subcmd;
 }
 
 // Print help message for available flags

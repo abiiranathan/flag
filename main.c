@@ -6,19 +6,19 @@ bool validate_int(const void* value) {
   return (*int_value >= 0 && *int_value <= 10);
 }
 
-void handle_subcommand(flag* flags, int num_flags, flag_ctx* ctx) {
-  int count = *(int*)flag_value(flags, num_flags, "count");
-  bool verbose = *(bool*)flag_value(flags, num_flags, "verbose");
+void handle_subcommand(FlagArgs args) {
+  int count = *(int*)flag_value(args.flags, args.num_flags, "count");
+  bool verbose = *(bool*)flag_value(args.flags, args.num_flags, "verbose");
 
   printf("count=%d verbose=%d\n", count, verbose);
 
   // ctx will provide you with access to global flags
-  double float64 = *(double*)flag_value_ctx(ctx, "float64");
+  double float64 = *(double*)flag_value_ctx(args.ctx, "float64");
   printf("float64 value in callback: %lf\n", float64);
 }
 
-void handle_greet(flag* flags, int num_flags, flag_ctx* ctx) {
-  const char* name = *(const char**)flag_value(flags, num_flags, "name");
+void handle_greet(FlagArgs args) {
+  const char* name = *(const char**)flag_value(args.flags, args.num_flags, "name");
   printf("Hello, %s!\n", name);
 }
 
@@ -90,25 +90,30 @@ int main(int argc, char* argv[]) {
 
 
   // Parse flags
-  parse_flags(&ctx, argc, argv, subcmds, sizeof(subcmds) / sizeof(subcommand));
-  // or parse_flags(&ctx, argc, argv); if no subcommands are needed
+  subcommand* cmd = parse_flags(&ctx, argc, argv, subcmds, sizeof(subcmds) / sizeof(subcommand));
 
-  // Print flag values printf("Parsed flag values:\n");
-  // printf("int: %d\n", integer_flag);
-  // printf("size_t: %zu\n", size_t_flag);
-  // printf("int8: %d\n", int8_flag);
-  // printf("int16: %d\n", int16_flag);
-  // printf("int32: %d\n", int32_flag);
-  // printf("int64: %ld\n", int64_flag);
-  // printf("uint: %u\n", uint_flag);
-  // printf("uint8: %u\n", uint8_flag);
-  // printf("uint16: %u\n", uint16_flag);
-  // printf("uint32: %u\n", uint32_flag);
-  // printf("uint64: %lu\n", uint64_flag);
-  // printf("uintptr: %lu\n", uintptr_flag);
-  // printf("float32: %f\n", float32_flag);
-  // printf("float64: %lf\n", float64_flag);
-  // printf("string: %s\n", string_flag);
+  // Print flag values
+  printf("Parsed flag values:\n");
+  printf("int: %d\n", integer_flag);
+  printf("size_t: %zu\n", size_t_flag);
+  printf("int8: %d\n", int8_flag);
+  printf("int16: %d\n", int16_flag);
+  printf("int32: %d\n", int32_flag);
+  printf("int64: %ld\n", int64_flag);
+  printf("uint: %u\n", uint_flag);
+  printf("uint8: %u\n", uint8_flag);
+  printf("uint16: %u\n", uint16_flag);
+  printf("uint32: %u\n", uint32_flag);
+  printf("uint64: %lu\n", uint64_flag);
+  printf("uintptr: %lu\n", uintptr_flag);
+  printf("float32: %f\n", float32_flag);
+  printf("float64: %lf\n", float64_flag);
+  printf("string: %s\n", string_flag);
+
+  // Run the matching subcommand. Returned from parse_args
+  if (cmd) {
+    subcommand_call(cmd, &ctx);
+  }
 
   // Clean up allocated memory
   flag_destroy_context(&ctx);
