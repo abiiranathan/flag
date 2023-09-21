@@ -1,4 +1,7 @@
-/* flag implements a command line flag parser.
+/* 
+filename: flag.h
+
+flag implements a command line flag parser.
 
 The flag package accepts command line arguments in the form of -flag value
 or --arg value.
@@ -7,20 +10,16 @@ The flag package supports the following types:
 bool, int, float32, float64, int8_t, int16_t, int32_t, int64_t, uint8_t,
 uint16_t, uint32_t, uint64_t, uintptr_t, size_t, unsigned int, and char *
 
-The package supports a shorthand notation where a
-flag may be specified with just a single dash (-) instead of the full --.
-Warning: The package does not support specifying a flag multiple times. In
-this case, the last value will overwrite the previous ones.
-
-The package also supports subcommands. Subcommands are specified by
-providing a subcommand struct to the parse_flags function. The subcommand
-struct contains a name, description, callback and flags. Only one subcommand
-may be specified at a time and is assumed to be the 2nd argument. i.e argv[1]
+See README for details.
 */
 
 #ifndef __FLAG_H__
 #define __FLAG_H__
 
+// This macro ensures fdopen strdup are available
+#define _DEFAULT_SOURCE 1
+
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -57,7 +56,7 @@ typedef enum {
 // and an error message to print if validation fails
 typedef struct flag_validator {
   bool (*validator)(const void* value);  // optional callback to validate flag
-  const char* error_message;             // error message to print if validation fails
+  const char* error_message;  // error message to print if validation fails
 } flag_validator;
 
 // Create a struct to hold flag information
@@ -66,21 +65,15 @@ typedef struct flag {
   void* value;                     // Value stored in the flag.
   flag_type type;                  // Flag Type enum.
   char* description;               // Flag description.
+  bool required;                   // This flag must be provided
   flag_validator* flag_validator;  // Optional validator for this flag.
 } flag;
 
-// Create a flag context to store global flags
-typedef struct flag_ctx {
-  flag* flags;           // flags in global context.
-  size_t flag_capacity;  // maximum number of flags allowed in flag_ctx.
-  int num_flags;         // Number of flags stored.
-} flag_ctx;
-
 // subcommand handler arguments.
 typedef struct FlagArgs {
-  flag* flags;    // subcommand flags
-  int num_flags;  // number of flags
-  flag_ctx* ctx;  // global ctx(to access other global flags)
+  flag* flags;           // subcommand flags
+  int num_flags;         // number of flags
+  struct flag_ctx* ctx;  // global ctx(to access other global flags)
 } FlagArgs;
 
 // Subcommand struct.
@@ -91,38 +84,47 @@ typedef struct subcommand {
   // optional callback. Called automatically with flags, num_flags and global flag context.
   // when done parsing it's flags.
   void (*callback)(FlagArgs args);
-  flag* flags;    // flags for this subcommand.
-  int num_flags;  // number of flags for this subcommand.
+  struct flag* flags;  // flags for this subcommand.
+  int num_flags;       // number of flags for this subcommand.
 } subcommand;
 
+// Create a flag context to store global flags
+typedef struct flag_ctx {
+  flag* flags;           // flags in global context.
+  size_t flag_capacity;  // maximum number of global flags allowed in flag_ctx.
+  size_t num_flags;      // Number of global flags stored.
+
+  subcommand* subcommands;     // array of subcommands
+  size_t num_subcommands;      // number of subcommands
+  size_t subcommand_capacity;  // Maximum number of subcommands
+} flag_ctx;
+
 // Create a global flag context. Must be freed with flag_destroy_context
-flag_ctx flag_create_context(size_t flag_capacity);
+void flag_context_init(flag_ctx* ctx, size_t flag_capacity,
+                       size_t subcommand_capacity);
 
 // Get string representation of flag type. returns "unknown" if type is not valid.
 const char* flag_type_string(flag_type type);
 
 // Add a global flag to the flag context
 void flag_add(flag_ctx* ctx, const char* name, void* value, flag_type type,
-              const char* description);
+              const char* description, bool required);
 
 // Add a flag to the flag context with a validator.
 // The validator is a callback function that takes a void pointer to the flag
 // value
-void flag_add_with_validator(flag_ctx* ctx, const char* name, void* value, flag_type type,
-                             const char* description, flag_validator* validator);
+void flag_add_with_validator(flag_ctx* ctx, const char* name, void* value,
+                             flag_type type, const char* description,
+                             bool required, flag_validator* validator);
 
+void flag_add_subcommand(flag_ctx* ctx, const subcommand* subcmd);
+void flag_add_subcommands(flag_ctx* ctx, const subcommand* subcmd,
+                          size_t num_subcmds);
 // Free memory used by flag_ctx flags.
 void flag_destroy_context(flag_ctx* ctx);
 
-// Parse global flags and subcommands, performing validation,
-// overflow checks and calling subcommand callbacks.
-// Optional subcommand array (subcommand *) may be passed to parse subcommands
-// followed the number of subcommands(int).
-//
-// Returns a ptr to the matching subcommand(or NULL if no subcommands) that can invoked with
-// the function subcommand_call.
-subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[], subcommand* subcommands,
-                        size_t num_subcommands);
+// Parses global flags subcommands and their flags and performs validation.
+subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[]);
 
 // Extract value of the flag by name given an array of flags.
 // Return a pointer to the value or NULL if not found.
@@ -130,7 +132,6 @@ void* flag_value(flag* flags, int num_flags, const char* name);
 
 // Get value from global flag context.
 void* flag_value_ctx(flag_ctx* ctx, const char* name);
-
 
 // Invoke the subcommand callback.
 void subcommand_call(subcommand* subcmd, flag_ctx* ctx);
@@ -143,38 +144,119 @@ void print_help(flag_ctx* ctx, char** argv);
 // FLAG IMLPEMENTATION
 #ifdef FLAG_IMPLEMENTATION
 
+
 // Initialize a flag context
-flag_ctx flag_create_context(size_t flag_capacity) {
-  flag_ctx ctx = {0};
-  ctx.flags = (flag*)malloc(sizeof(flag) * flag_capacity);
-  if (ctx.flags == NULL) {
+void flag_context_init(flag_ctx* ctx, size_t flag_capacity,
+                       size_t subcommand_capacity) {
+  assert(ctx != NULL);
+
+  ctx->flags = (flag*)malloc(sizeof(flag) * flag_capacity);
+  if (ctx->flags == NULL) {
     fprintf(stderr, "Error: Failed to allocate memory for flags\n");
     exit(EXIT_FAILURE);
   }
+  ctx->flag_capacity = flag_capacity;
 
-  ctx.flag_capacity = flag_capacity;
-  return ctx;
+  ctx->subcommand_capacity = subcommand_capacity;
+  ctx->subcommands =
+    (subcommand*)calloc(subcommand_capacity, sizeof(subcommand));
+
+  if (ctx->subcommands == NULL) {
+    fprintf(stderr, "Error: Failed to allocate memory for subcommands\n");
+    exit(EXIT_FAILURE);
+  }
+}
+
+void flag_destroy_context(flag_ctx* ctx) {
+  // Free global flags
+  for (size_t i = 0; i < ctx->num_flags; i++) {
+    free(ctx->flags[i].name);
+    free(ctx->flags[i].description);
+  }
+  free(ctx->flags);
+
+  // Free subcommands
+  for (size_t i = 0; i < ctx->num_subcommands; i++) {
+    // Free subcommand flags (name and description)
+    for (size_t j = 0; j < ctx->subcommands[i].num_flags; j++) {
+      free(ctx->subcommands[i].flags[j].name);
+      free(ctx->subcommands[i].flags[j].description);
+    }
+    free(ctx->subcommands[i].flags);
+  }
+  free(ctx->subcommands);
 }
 
 // Add a flag to the flag context
 void flag_add(flag_ctx* ctx, const char* name, void* value, flag_type type,
-              const char* description) {
+              const char* description, bool required) {
   // check for enough capacity
   if (ctx->num_flags >= ctx->flag_capacity) {
     fprintf(stderr, "Error: Not enough capacity to add flag %s\n", name);
     exit(EXIT_FAILURE);
   }
 
+  assert(name != NULL);
+  assert(value != NULL);
+  assert(description != NULL);
+
   ctx->flags[ctx->num_flags].name = strdup(name);
   ctx->flags[ctx->num_flags].value = value;
   ctx->flags[ctx->num_flags].type = type;
   ctx->flags[ctx->num_flags].description = strdup(description);
+  ctx->flags[ctx->num_flags].required = required;
+  ctx->flags[ctx->num_flags].flag_validator = NULL;
   ctx->num_flags++;
 }
 
-void flag_add_with_validator(flag_ctx* ctx, const char* name, void* value, flag_type type,
-                             const char* description, flag_validator* validator) {
-  flag_add(ctx, name, value, type, description);
+void flag_add_subcommand(flag_ctx* ctx, const subcommand* subcmd) {
+  if (ctx->num_subcommands >= ctx->subcommand_capacity) {
+    fprintf(stderr, "Error: Not enough capacity to add subcommand %s\n",
+            subcmd->name);
+    exit(EXIT_FAILURE);
+  }
+
+  subcommand s = {
+    .name = strdup(subcmd->name),
+    .description = strdup(subcmd->description),
+    .callback = subcmd->callback,
+    .flags = (flag*)malloc(sizeof(flag) * subcmd->num_flags),
+    .num_flags = subcmd->num_flags,
+  };
+
+  // Sanity checks
+  assert(s.name != NULL);
+  assert(s.description != NULL);
+  assert(s.flags != NULL);
+
+  // Copy all the flags over
+  for (size_t i = 0; i < subcmd->num_flags; i++) {
+    s.flags[i] = (flag){.name = strdup(subcmd->flags[i].name),
+                        .value = subcmd->flags[i].value,
+                        .type = subcmd->flags[i].type,
+                        .description = strdup(subcmd->flags[i].description),
+                        .required = subcmd->flags[i].required,
+                        .flag_validator = subcmd->flags[i].flag_validator};
+
+    assert(s.flags[i].name != NULL);
+    assert(s.flags[i].description != NULL);
+  }
+
+  ctx->subcommands[ctx->num_subcommands] = s;
+  ctx->num_subcommands++;
+}
+
+void flag_add_subcommands(flag_ctx* ctx, const subcommand* subcmd,
+                          size_t num_subcmds) {
+  for (size_t i = 0; i < num_subcmds; i++) {
+    flag_add_subcommand(ctx, &subcmd[i]);
+  }
+}
+
+void flag_add_with_validator(flag_ctx* ctx, const char* name, void* value,
+                             flag_type type, const char* description,
+                             bool required, flag_validator* validator) {
+  flag_add(ctx, name, value, type, description, required);
   ctx->flags[ctx->num_flags - 1].flag_validator = validator;
 }
 
@@ -215,13 +297,15 @@ void fatalf(const char* format, ...) {
 
 void validate_integer(flag* flags, const char** argv, int i, int j) {
   if (!is_valid_integer(argv[i])) {
-    fprintf(stderr, "Error: Invalid integer value for flag %s\n", flags[j].name);
+    fprintf(stderr, "Error: Invalid integer value for flag %s\n",
+            flags[j].name);
     exit(EXIT_FAILURE);
   }
 }
 
 // Function to find a command by name
-subcommand* find_subcommand(subcommand* subcmds, int num_commands, const char* name) {
+subcommand* find_subcommand(subcommand* subcmds, int num_commands,
+                            const char* name) {
   for (int i = 0; i < num_commands; i++) {
     if (strcmp(subcmds[i].name, name) == 0) {
       return &subcmds[i];
@@ -259,18 +343,30 @@ void* flag_value_ctx(flag_ctx* ctx, const char* name) {
 
 // Invoke the subcommand callback.
 void subcommand_call(subcommand* subcmd, flag_ctx* ctx) {
-  if (subcmd == NULL || ctx == NULL)
-    return;
+  assert(subcmd != NULL);
+  assert(ctx != NULL);
 
   // Once we are done. We call the subcommand callback.
   if (subcmd->callback != NULL) {
-    subcmd->callback(
-      (FlagArgs){.flags = subcmd->flags, .num_flags = subcmd->num_flags, .ctx = ctx});
+    FlagArgs args = {
+      .flags = subcmd->flags,
+      .num_flags = subcmd->num_flags,
+      .ctx = ctx,
+    };
+    subcmd->callback(args);
+  } else {
+    fprintf(stderr, "Error: No callback specified for subcommand %s\n",
+            subcmd->name);
+    exit(EXIT_FAILURE);
   }
 }
 
 void parse_subcommand_flag(flag* flag, char* arg) {
-  errno = 0;  // Reset errno before calling atoi/atoll/atof/strtod etc.
+  errno = 0;  // Reset errno before conversion.
+  assert(flag != NULL);
+  if (arg == NULL) {
+    fatalf("Error: No value specified for flag %s\n", flag->name);
+  }
 
   switch (flag->type) {
     case FLAG_BOOL: {
@@ -280,7 +376,8 @@ void parse_subcommand_flag(flag* flag, char* arg) {
       } else if (strcasecmp(arg, "false") == 0) {
         *((bool*)flag->value) = false;
       } else {
-        fatalf("Error: Invalid boolean value %s for flag %s\n", arg, flag->name);
+        fatalf("Error: Invalid boolean value %s for flag %s\n", arg,
+               flag->name);
       }
     } break;
     case FLAG_INT: {
@@ -388,7 +485,8 @@ void parse_subcommand_flag(flag* flag, char* arg) {
   }
 }
 
-void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** argv) {
+void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc,
+                       char** argv) {
   int i = *iptr;
   // Handle both single-dash and double-dash flag notation
   const char* flag_name = (argv[i][1] == '-') ? &argv[i][2] : &argv[i][1];
@@ -431,7 +529,8 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** a
 
           intmax_t int_value = strtoimax(argv[i], NULL, 10);
           if (errno == ERANGE || int_value < INT8_MIN || int_value > INT8_MAX) {
-            fatalf("Error: Int8 overflow or underflow for flag %s\n", flags[j].name);
+            fatalf("Error: Int8 overflow or underflow for flag %s\n",
+                   flags[j].name);
           }
           *((int8_t*)flags[j].value) = (int8_t)int_value;
         } break;
@@ -439,8 +538,10 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** a
           validate_integer(flags, (const char**)argv, i, j);
 
           intmax_t int_value = strtoimax(argv[i], NULL, 10);
-          if (errno == ERANGE || int_value < INT16_MIN || int_value > INT16_MAX) {
-            fatalf("Error: Int16 overflow or underflow for flag %s\n", flags[j].name);
+          if (errno == ERANGE || int_value < INT16_MIN ||
+              int_value > INT16_MAX) {
+            fatalf("Error: Int16 overflow or underflow for flag %s\n",
+                   flags[j].name);
           }
           *((int16_t*)flags[j].value) = (int16_t)int_value;
         } break;
@@ -448,8 +549,10 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** a
           validate_integer(flags, (const char**)argv, i, j);
 
           intmax_t int_value = strtoimax(argv[i], NULL, 10);
-          if (errno == ERANGE || int_value < INT32_MIN || int_value > INT32_MAX) {
-            fatalf("Error: Int32 overflow or underflow for flag %s\n", flags[j].name);
+          if (errno == ERANGE || int_value < INT32_MIN ||
+              int_value > INT32_MAX) {
+            fatalf("Error: Int32 overflow or underflow for flag %s\n",
+                   flags[j].name);
           }
           *((int32_t*)flags[j].value) = (int32_t)int_value;
         } break;
@@ -457,8 +560,10 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** a
           validate_integer(flags, (const char**)argv, i, j);
 
           intmax_t int_value = strtoimax(argv[i], NULL, 10);
-          if (errno == ERANGE || int_value < INT64_MIN || int_value > INT64_MAX) {
-            fatalf("Error: Int64 overflow or underflow for flag %s\n", flags[j].name);
+          if (errno == ERANGE || int_value < INT64_MIN ||
+              int_value > INT64_MAX) {
+            fatalf("Error: Int64 overflow or underflow for flag %s\n",
+                   flags[j].name);
           }
           *((int64_t*)flags[j].value) = (int64_t)int_value;
         } break;
@@ -512,7 +617,7 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** a
 
           uintmax_t uint_value = strtoumax(argv[i], NULL, 10);
           if (errno == ERANGE || uint_value > UINTPTR_MAX) {
-            fatalf("Error: Uint64 overflow for flag %s\n", flags[j].name);
+            fatalf("Error: uintptr_t overflow for flag %s\n", flags[j].name);
           }
           *((uintptr_t*)flags[j].value) = (uintptr_t)uint_value;
         } break;
@@ -536,9 +641,11 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** a
       }
 
       // If a validator is specified, call it
-      if (flags[j].flag_validator != NULL && flags[j].flag_validator->validator != NULL) {
+      if (flags[j].flag_validator != NULL &&
+          flags[j].flag_validator->validator != NULL) {
         if (!flags[j].flag_validator->validator(flags[j].value)) {
-          fprintf(stderr, "Error: Invalid value for flag %s: %s\n", flags[j].name,
+          fprintf(stderr, "Error: Invalid value for flag %s: %s\n",
+                  flags[j].name,
                   flags[j].flag_validator->error_message == NULL
                     ? "Invalid value"
                     : flags[j].flag_validator->error_message);
@@ -551,15 +658,14 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, char** a
 }
 
 // Parse command line arguments and set flag values
-subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[], subcommand* subcommands,
-                        size_t num_subcommands) {
+subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[]) {
   if (argc < 2) {
     return NULL;  // no subcommands or arguments
   }
 
   // Loop over all arguments in 2 passes.
-  // The first pass handles global flags.
-  // The second pass handles subcommands.
+  // first pass  -> global flags.
+  // second pass -> subcommands.
   int subcmdIndex = -1;
   subcommand* subcmd = NULL;
 
@@ -568,7 +674,7 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[], subcommand* subco
       const char* flag_name = (argv[i][1] == '-') ? &argv[i][2] : &argv[i][1];
 
       // handle help request.
-      if (strcmp(flag_name, "help") == 0) {
+      if (strcmp(flag_name, "help") == 0 || strcmp(flag_name, "h")) {
         print_help(ctx, argv);
         exit(EXIT_SUCCESS);
       }
@@ -576,12 +682,13 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[], subcommand* subco
       parse_flag_helper(ctx->flags, ctx->num_flags, &i, argc, argv);
     } else {
       // check if this is a subcommand
-      if (!subcommands || num_subcommands == 0) {
+      if (!ctx->subcommands || ctx->num_subcommands == 0) {
         continue;
       }
 
       // Find subcommand matching current argument.
-      subcmd = find_subcommand(subcommands, num_subcommands, &argv[i][0]);
+      subcmd =
+        find_subcommand(ctx->subcommands, ctx->num_subcommands, &argv[i][0]);
       if (subcmd) {
         subcmdIndex = i;
         break;  // stop processing global flags.
@@ -589,21 +696,27 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[], subcommand* subco
     }
   }
 
-
   // Handle subcommand if it was found.
   if (!subcmd) {
     return NULL;
   }
 
+  // Create an array of processed flags. So we can validate required flags
+  flag proccessed_flags[subcmd->num_flags];
+  // zero the array of flag structs
+  memset(proccessed_flags, 0, sizeof(flag) * subcmd->num_flags);
+
   ++subcmdIndex;  // start after subcommand and continue up to argc
   while (subcmdIndex < argc) {
-    char* arg = argv[subcmdIndex][0] == '-' ? &argv[subcmdIndex][1] : &argv[subcmdIndex][0];
+    char* arg = argv[subcmdIndex][0] == '-' ? &argv[subcmdIndex][1]
+                                            : &argv[subcmdIndex][0];
     flag* flag = NULL;
 
     // find flag index matching next flag.
     for (size_t j = 0; j < subcmd->num_flags; j++) {
       if (strcmp(subcmd->flags[j].name, arg) == 0) {
         flag = &subcmd->flags[j];
+        proccessed_flags[j] = *flag;
         break;
       }
     }
@@ -613,32 +726,92 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[], subcommand* subco
       parse_subcommand_flag(flag, argv[subcmdIndex]);
     }
   }
+
+  // Post processing validation
+  for (int i = 0; i < subcmd->num_flags; i++) {
+    flag procFlag = proccessed_flags[i];
+    flag actualFlag = subcmd->flags[i];
+
+    if (actualFlag.required && procFlag.value == NULL) {
+      fprintf(stderr, "\n[ERROR]: Flag %s is required\n\n", actualFlag.name);
+      print_help(ctx, argv);
+      exit(EXIT_FAILURE);
+    }
+  }
   return subcmd;
+}
+
+static int maxNameLength(flag* flags, int n) {
+  int max = 0;
+  for (int i = 0; i < n; i++) {
+    int len = strlen(flags[i].name);
+    if (len > max) {
+      max = len;
+    }
+  }
+  return max;
+}
+
+static int maxTypeLength(flag* flags, int n) {
+  int max = 0;
+  for (int i = 0; i < n; i++) {
+    int len = strlen(flag_type_string(flags[i].type));
+    if (len > max) {
+      max = len;
+    }
+  }
+  return max;
 }
 
 // Print help message for available flags
 void print_help(flag_ctx* ctx, char** argv) {
-  int max_name_length = 0;
-  int max_type_length = 0;
-  for (int i = 0; i < ctx->num_flags; i++) {
-    int name_length = strlen(ctx->flags[i].name);
-    if (name_length > max_name_length) {
-      max_name_length = name_length;
-    }
-
-    int type_length = strlen(flag_type_string(ctx->flags[i].type));
-    if (type_length > max_type_length) {
-      max_type_length = type_length;
-    }
-  }
+  int max_name_len_global = maxNameLength(ctx->flags, ctx->num_flags);
 
   // Print help message for available flags with aligned text
   printf("%s\n", argv[0]);
-  printf("Available flags:\n");
+  printf("Global flags:\n");
   for (int i = 0; i < ctx->num_flags; i++) {
-    printf("  -%-*s --%s <%s>: %s\n\n", max_name_length, ctx->flags[i].name, ctx->flags[i].name,
+    printf("  -%-*s --%s(%s) <%s>: %s\n\n", max_name_len_global,
+           ctx->flags[i].name, ctx->flags[i].name,
+           ctx->flags[i].required ? "Required" : "Optional",
            flag_type_string(ctx->flags[i].type), ctx->flags[i].description);
   }
+
+
+  int max_name_len_subcmd = 0;
+  int max_type_len_subcmd = 0;
+
+  for (int i = 0; i < ctx->num_subcommands; i++) {
+    int name_len =
+      maxNameLength(ctx->subcommands[i].flags, ctx->subcommands[i].num_flags);
+    int type_len =
+      maxTypeLength(ctx->subcommands[i].flags, ctx->subcommands[i].num_flags);
+
+    if (name_len > max_name_len_subcmd) {
+      max_name_len_subcmd = name_len;
+    }
+
+    if (type_len > max_type_len_subcmd) {
+      max_type_len_subcmd = type_len;
+    }
+  }
+
+  // print subcommands and their flags
+  printf("Subcommands:\n");
+  for (int i = 0; i < ctx->num_subcommands; i++) {
+    printf("  %s: %s\n", ctx->subcommands[i].name,
+           ctx->subcommands[i].description);
+    for (int j = 0; j < ctx->subcommands[i].num_flags; j++) {
+      printf("    -%-*s --%s(%s) <%s>: %s\n", max_name_len_subcmd,
+             ctx->subcommands[i].flags[j].name,
+             ctx->subcommands[i].flags[j].name,
+             ctx->subcommands[i].flags[j].required ? "Required" : "Optional",
+             flag_type_string(ctx->subcommands[i].flags[j].type),
+             ctx->subcommands[i].flags[j].description);
+    }
+    printf("\n");
+  }
+  printf("\n");
 }
 
 // Convert flag type to a string for printing
@@ -681,14 +854,6 @@ const char* flag_type_string(flag_type type) {
   }
 }
 
-void flag_destroy_context(flag_ctx* ctx) {
-  // Free global flags
-  for (int i = 0; i < ctx->num_flags; i++) {
-    free(ctx->flags[i].name);
-    free(ctx->flags[i].description);
-  }
-  free(ctx->flags);
-}
 
 #endif /* FLAG_IMPLEMENTATION */
 
