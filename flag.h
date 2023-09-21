@@ -78,8 +78,8 @@ typedef struct FlagArgs {
 
 // Subcommand struct.
 typedef struct subcommand {
-  const char* name;         // name of the subcommand.
-  const char* description;  // usage description.
+  char* name;         // name of the subcommand.
+  char* description;  // usage description.
 
   // optional callback. Called automatically with flags, num_flags and global flag context.
   // when done parsing it's flags.
@@ -177,13 +177,20 @@ void flag_destroy_context(flag_ctx* ctx) {
 
   // Free subcommands
   for (size_t i = 0; i < ctx->num_subcommands; i++) {
+    // free subcommand name and description
+    free(ctx->subcommands[i].name);
+    free(ctx->subcommands[i].description);
+
     // Free subcommand flags (name and description)
     for (size_t j = 0; j < ctx->subcommands[i].num_flags; j++) {
       free(ctx->subcommands[i].flags[j].name);
       free(ctx->subcommands[i].flags[j].description);
     }
+    // free each subcommand flags array
     free(ctx->subcommands[i].flags);
   }
+
+  // free subcommands array
   free(ctx->subcommands);
 }
 
@@ -660,6 +667,7 @@ void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc,
 // Parse command line arguments and set flag values
 subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[]) {
   if (argc < 2) {
+    flag_destroy_context(ctx);
     return NULL;  // no subcommands or arguments
   }
 
@@ -676,6 +684,8 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[]) {
       // handle help request.
       if (strcmp(flag_name, "help") == 0 || strcmp(flag_name, "h")) {
         print_help(ctx, argv);
+        // Free memory
+        flag_destroy_context(ctx);
         exit(EXIT_SUCCESS);
       }
 
@@ -735,6 +745,7 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[]) {
     if (actualFlag.required && procFlag.value == NULL) {
       fprintf(stderr, "\n[ERROR]: Flag %s is required\n\n", actualFlag.name);
       print_help(ctx, argv);
+      flag_destroy_context(ctx);
       exit(EXIT_FAILURE);
     }
   }
