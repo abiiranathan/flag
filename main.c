@@ -1,4 +1,3 @@
-#define FLAG_IMPLEMENTATION
 #include "flag.h"
 
 bool validate_int(const void* value) {
