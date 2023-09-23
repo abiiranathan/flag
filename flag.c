@@ -1,9 +1,14 @@
 #include "flag.h"
 
+extern void inline realdbgprintf(const char* SourceFilename, int SourceLineno,
+                                 const char* CFormatString, ...);
+
+static const char* flag_type_string(flag_type type);
+
 // Initialize a flag context and add global help flag.
-flag_ctx* flag_context_init() {
+flag_ctx* flag_context_init(void) {
   flag_ctx* ctx = (flag_ctx*)malloc(sizeof(flag_ctx));
-  f_assert_not_null(ctx, "[ERROR]: Unable to allocated memory for flag_ctx");
+  f_assert(ctx != NULL, "[ERROR]: Unable to allocated memory for flag_ctx");
 
   ctx->num_flags = 0;
   ctx->num_subcommands = 0;
@@ -35,6 +40,7 @@ void flag_add(flag_ctx* ctx, const char* name, void* value, flag_type type,
            "[ERROR]: Not enough capacity in global flags to add flag: %s\n",
            name);
 
+
   // copy name
   strncpy(ctx->flags[ctx->num_flags].name, name, MAX_NAME - 1);
   // null terminate name
@@ -62,11 +68,10 @@ subcommand* flag_add_subcommand(flag_ctx* ctx, const char* name,
     "[ERROR]: Not enough capacity in subcommands to add subcommand: %s\n",
     name);
 
-  f_assert_not_null(handler, "can not add subcommand with NULL handler");
+  f_assert(handler != NULL, "can not add subcommand with NULL handler");
 
   subcommand* subcmd = (subcommand*)malloc(sizeof(subcommand));
-  f_assert_not_null(subcmd,
-                    "[ERROR]: Unable to allocate memory for subcommand");
+  f_assert(subcmd, "[ERROR]: Unable to allocate memory for subcommand");
 
   strncpy(subcmd->name, name, MAX_NAME - 1);
   subcmd->name[MAX_NAME - 1] = '\0';
@@ -77,8 +82,8 @@ subcommand* flag_add_subcommand(flag_ctx* ctx, const char* name,
 
   subcmd->callback = handler;
   subcmd->flags = (flag*)malloc(flag_capacity * sizeof(flag));
-  f_assert_not_null(subcmd->flags,
-                    "[ERROR]: Unable to allocate memory for subcommand flags");
+  f_assert(subcmd->flags,
+           "[ERROR]: Unable to allocate memory for subcommand flags");
 
   subcmd->num_flags = 0;
   subcmd->flag_capacity = flag_capacity;
@@ -200,7 +205,7 @@ void* flag_value_ctx(flag_ctx* ctx, const char* name) {
 
 // Invoke the subcommand callback.
 void subcommand_call(subcommand* subcmd, flag_ctx* ctx) {
-  f_assert_not_null(subcmd, "subcommand can not be NULL");
+  f_assert(subcmd != NULL, "subcommand can not be NULL");
 
   // Once we are done. We call the subcommand callback.
   FlagArgs args = {

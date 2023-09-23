@@ -93,6 +93,31 @@ flag_destroy_context(ctx);
 
 This function frees the memory used by the global flags and subcommands in the flag context.
 
+### OVERRIDING DEFAULTS
+
+To override and control the amount of memory allocated for subcommands and global flags, compile with the following flags:
+
+```bash
+-D MAX_SUBCOMMANDS=10 -D MAX_GLOBAL_FLAGS=10
+```
+
+To override and control the amount of memory allocated for flag names and descriptions(same for subcommands), compile with the following flags:
+
+```bash
+-D MAX_NAME=20 -D MAX_DESCRIPTION=50
+```
+
+Default values are:
+
+- MAX_NAME = 64
+- MAX_DESCRIPTION = 256
+- MAX_SUBCOMMANDS = 10
+- MAX_GLOBAL_FLAGS = 24
+
+### Example
+
+See [main.c](main.c) for a simple example of how to use the Flag Library.
+
 ## License
 
 The Flag Library is released under the MIT License. See the `LICENSE` file for more information.

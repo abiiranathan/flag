@@ -33,15 +33,35 @@
 #include <stdlib.h>
 #include <string.h>
 
+void inline realdbgprintf(const char* SourceFilename, int SourceLineno,
+                          const char* CFormatString, ...) {
+  va_list args;
+  va_start(args, CFormatString);
+  fprintf(stderr, "%s(%d): ", SourceFilename, SourceLineno);
+  vfprintf(stderr, CFormatString, args);
+  va_end(args);
+  fprintf(stderr, "\n");
+}
 
-#define f_assert(bool_expr, format, ...)                                       \
-  if (!(bool_expr)) {                                                          \
-    fprintf(stderr, format, ##__VA_ARGS__);                                    \
-    assert((bool_expr));                                                       \
-  }
+// Define dbgprintf
+#define dbgprintf(...)                                                         \
+  (sizeof("" #__VA_ARGS__) > 1                                                 \
+     ? realdbgprintf(__FILE__, __LINE__, __VA_ARGS__)                          \
+     : realdbgprintf(__FILE__, __LINE__, ""))
 
-#define f_assert_not_null(ptr, format, ...)                                    \
-  f_assert((ptr) != NULL, format, ##__VA_ARGS__)
+
+#ifdef NDEBUG
+#define f_assert(expr, ...) ((void)0)
+#else
+#define f_assert(expr, ...)                                                    \
+  do {                                                                         \
+    if (!(expr)) {                                                             \
+      realdbgprintf(__FILE__, __LINE__, __VA_ARGS__);                          \
+      assert((expr));                                                          \
+    }                                                                          \
+  } while (0)
+#endif
+
 
 #ifndef MAX_NAME
 #define MAX_NAME 64  // Maximum length of flag or subcommand name
@@ -127,9 +147,6 @@ typedef struct flag_ctx {
 
 // Create a global flag context. Must be freed with flag_destroy_context
 flag_ctx* flag_context_init(void);
-
-// Get string representation of flag type. returns "unknown" if type is not valid.
-static const char* flag_type_string(flag_type type);
 
 // Add a global flag to the flag context
 void flag_add(flag_ctx* ctx, const char* name, void* value, flag_type type,
