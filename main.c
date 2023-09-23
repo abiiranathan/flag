@@ -23,7 +23,7 @@ void handle_greet(FlagArgs args) {
 }
 
 int main(int argc, char* argv[]) {
-  flag_ctx* ctx = flag_context_init(20, 3);
+  flag_ctx* ctx = flag_context_init();
 
   // Define flags with intuitive names and descriptions
   int integer_flag = 0;

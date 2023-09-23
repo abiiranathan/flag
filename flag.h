@@ -1,3 +1,19 @@
+/**
+ * @file flag.h
+ * @brief Header file containing declarations for a command-line flag parsing library.
+ * 
+ * This file contains declarations for a command-line flag parsing library. It defines the
+ * structures and functions used to create and manage flags and subcommands, parse command-line
+ * arguments, and perform validation on flag values.
+ * 
+ * The library supports a variety of flag types, including bool, int, size_t, int8_t, int16_t,
+ * int32_t, int64_t, unsigned int, uint8_t, uint16_t, uint32_t, uint64_t, uintptr_t, float,
+ * double, and char *. It also allows for the addition of custom validators to validate flag
+ * values.
+ * 
+ * @author Dr. Abiira Nathan
+ */
+
 #ifndef __FLAG_H__
 #define __FLAG_H__
 
@@ -17,8 +33,31 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_NAME 64
-#define MAX_DESCRIPTION 256
+
+#define f_assert(bool_expr, format, ...)                                       \
+  if (!(bool_expr)) {                                                          \
+    fprintf(stderr, format, ##__VA_ARGS__);                                    \
+    assert((bool_expr));                                                       \
+  }
+
+#define f_assert_not_null(ptr, format, ...)                                    \
+  f_assert((ptr) != NULL, format, ##__VA_ARGS__)
+
+#ifndef MAX_NAME
+#define MAX_NAME 64  // Maximum length of flag or subcommand name
+#endif
+
+#ifndef MAX_DESCRIPTION
+#define MAX_DESCRIPTION 256  // Maximum length of flag or subcommand description
+#endif
+
+#ifndef MAX_GLOBAL_FLAGS
+#define MAX_GLOBAL_FLAGS 24  // Maximum number of global flags
+#endif
+
+#ifndef MAX_SUBCOMMANDS
+#define MAX_SUBCOMMANDS 10  // Maximum number of subcommands
+#endif
 
 // Supported flag types
 typedef enum {
@@ -79,20 +118,18 @@ typedef struct subcommand {
 
 // Create a flag context to store global flags
 typedef struct flag_ctx {
-  flag* flags;           // flags in global context.
-  size_t flag_capacity;  // maximum number of global flags allowed in flag_ctx.
-  size_t num_flags;      // Number of global flags stored.
+  flag flags[MAX_GLOBAL_FLAGS];  // flags in global context.
+  size_t num_flags;              // Number of global flags stored.
 
-  subcommand** subcommands;    // array of subcommands
-  size_t num_subcommands;      // number of subcommands
-  size_t subcommand_capacity;  // Maximum number of subcommands
+  subcommand* subcommands[MAX_SUBCOMMANDS];  // array of pointers to subcommands
+  size_t num_subcommands;                    // number of subcommands
 } flag_ctx;
 
 // Create a global flag context. Must be freed with flag_destroy_context
-flag_ctx* flag_context_init(size_t flag_capacity, size_t subcommand_capacity);
+flag_ctx* flag_context_init(void);
 
 // Get string representation of flag type. returns "unknown" if type is not valid.
-const char* flag_type_string(flag_type type);
+static const char* flag_type_string(flag_type type);
 
 // Add a global flag to the flag context
 void flag_add(flag_ctx* ctx, const char* name, void* value, flag_type type,

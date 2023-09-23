@@ -1,52 +1,41 @@
 #include "flag.h"
 
-// Initialize a flag context
-flag_ctx* flag_context_init(size_t flag_capacity, size_t subcommand_capacity) {
+// Initialize a flag context and add global help flag.
+flag_ctx* flag_context_init() {
   flag_ctx* ctx = (flag_ctx*)malloc(sizeof(flag_ctx));
-  assert(ctx != NULL);
+  f_assert_not_null(ctx, "[ERROR]: Unable to allocated memory for flag_ctx");
 
-  ctx->flag_capacity = flag_capacity;
-  ctx->subcommand_capacity = subcommand_capacity;
-  ctx->flags = (flag*)malloc(sizeof(flag) * flag_capacity);
-  assert(ctx->flags != NULL);
+  ctx->num_flags = 0;
+  ctx->num_subcommands = 0;
 
-  ctx->subcommands =
-    (subcommand**)calloc(subcommand_capacity, sizeof(subcommand*));
+  memset(ctx->flags, 0, sizeof(flag) * MAX_GLOBAL_FLAGS);
+  memset(ctx->subcommands, 0, sizeof(subcommand*) * MAX_SUBCOMMANDS);
 
-  assert(ctx->subcommands != NULL);
+  // Add help flag
+  flag_add(ctx, "help", NULL, FLAG_BOOL, "Print help message and exit", false);
   return ctx;
 }
 
 void flag_destroy_context(flag_ctx* ctx) {
-  if (ctx == NULL)
-    return;
-
-  // Free global flags
-  free(ctx->flags);
-
-  // Free subcommands
-  for (size_t i = 0; i < ctx->num_subcommands; i++) {
-    // free each subcommand flags array
-    free(ctx->subcommands[i]->flags);
-
-    // Free subcommand
-    free(ctx->subcommands[i]);
+  if (ctx) {
+    for (size_t i = 0; i < ctx->num_subcommands; i++) {
+      free(ctx->subcommands[i]->flags);
+      free(ctx->subcommands[i]);
+    }
+    free(ctx);
+    ctx = NULL;
   }
-
-  // free subcommands array
-  free(ctx->subcommands);
-
-  // free the context
-  free(ctx);
-  ctx = NULL;
 }
 
 // Add a flag to the flag context
 void flag_add(flag_ctx* ctx, const char* name, void* value, flag_type type,
               const char* description, bool required) {
   // check for enough capacity
-  assert(ctx->flag_capacity > ctx->num_flags);
+  f_assert(MAX_GLOBAL_FLAGS > ctx->num_flags,
+           "[ERROR]: Not enough capacity in global flags to add flag: %s\n",
+           name);
 
+  // copy name
   strncpy(ctx->flags[ctx->num_flags].name, name, MAX_NAME - 1);
   // null terminate name
   ctx->flags[ctx->num_flags].name[MAX_NAME - 1] = '\0';
@@ -67,9 +56,17 @@ subcommand* flag_add_subcommand(flag_ctx* ctx, const char* name,
                                 const char* desc,
                                 void (*handler)(FlagArgs args),
                                 size_t flag_capacity) {
-  assert(ctx->subcommand_capacity > ctx->num_subcommands);
+
+  f_assert(
+    MAX_SUBCOMMANDS > ctx->num_subcommands,
+    "[ERROR]: Not enough capacity in subcommands to add subcommand: %s\n",
+    name);
+
+  f_assert_not_null(handler, "can not add subcommand with NULL handler");
+
   subcommand* subcmd = (subcommand*)malloc(sizeof(subcommand));
-  assert(subcmd != NULL);
+  f_assert_not_null(subcmd,
+                    "[ERROR]: Unable to allocate memory for subcommand");
 
   strncpy(subcmd->name, name, MAX_NAME - 1);
   subcmd->name[MAX_NAME - 1] = '\0';
@@ -77,9 +74,11 @@ subcommand* flag_add_subcommand(flag_ctx* ctx, const char* name,
   strncpy(subcmd->description, desc, MAX_DESCRIPTION - 1);
   subcmd->description[MAX_DESCRIPTION - 1] = '\0';
 
+
   subcmd->callback = handler;
   subcmd->flags = (flag*)malloc(flag_capacity * sizeof(flag));
-  assert(subcmd->flags != NULL);
+  f_assert_not_null(subcmd->flags,
+                    "[ERROR]: Unable to allocate memory for subcommand flags");
 
   subcmd->num_flags = 0;
   subcmd->flag_capacity = flag_capacity;
@@ -92,7 +91,9 @@ void subcommand_add_flag(subcommand* subcmd, const char* name, void* value,
                          flag_type type, const char* description, bool required,
                          flag_validator* validator) {
 
-  assert(subcmd->num_flags < subcmd->flag_capacity);
+  f_assert(subcmd->num_flags < subcmd->flag_capacity,
+           "[ERROR]: Not enough capacity new subcommand(%s) flag: %s\n",
+           subcmd->name, name);
 
   strncpy(subcmd->flags[subcmd->num_flags].name, name, MAX_NAME - 1);
   subcmd->flags[subcmd->num_flags].name[MAX_NAME - 1] = '\0';
@@ -199,30 +200,19 @@ void* flag_value_ctx(flag_ctx* ctx, const char* name) {
 
 // Invoke the subcommand callback.
 void subcommand_call(subcommand* subcmd, flag_ctx* ctx) {
-  assert(subcmd != NULL);
-  assert(ctx != NULL);
+  f_assert_not_null(subcmd, "subcommand can not be NULL");
 
   // Once we are done. We call the subcommand callback.
-  if (subcmd->callback != NULL) {
-    FlagArgs args = {
-      .flags = subcmd->flags,
-      .num_flags = subcmd->num_flags,
-      .ctx = ctx,
-    };
-    subcmd->callback(args);
-  } else {
-    fprintf(stderr, "Error: No callback specified for subcommand %s\n",
-            subcmd->name);
-    exit(EXIT_FAILURE);
-  }
+  FlagArgs args = {
+    .flags = subcmd->flags,
+    .num_flags = subcmd->num_flags,
+    .ctx = ctx,
+  };
+  subcmd->callback(args);
 }
 
 void parse_subcommand_flag(flag* flag, char* arg) {
   errno = 0;  // Reset errno before conversion.
-  assert(flag != NULL);
-  if (arg == NULL) {
-    fatalf("Error: No value specified for flag %s\n", flag->name);
-  }
 
   switch (flag->type) {
     case FLAG_BOOL: {
@@ -232,8 +222,8 @@ void parse_subcommand_flag(flag* flag, char* arg) {
       } else if (strcasecmp(arg, "false") == 0) {
         *((bool*)flag->value) = false;
       } else {
-        fatalf("Error: Invalid boolean value %s for flag %s\n", arg,
-               flag->name);
+        // assume it is a flag
+        *((bool*)flag->value) = true;
       }
     } break;
     case FLAG_INT: {
@@ -530,15 +520,16 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[]) {
       const char* flag_name = (argv[i][1] == '-') ? &argv[i][2] : &argv[i][1];
 
       // handle help request.
-      if (strcmp(flag_name, "help") == 0 || strcmp(flag_name, "h")) {
+      if (strcmp(flag_name, "help") == 0) {
         print_help(ctx, argv);
+        flag_destroy_context(ctx);
         exit(EXIT_SUCCESS);
       }
 
       parse_flag_helper(ctx->flags, ctx->num_flags, &i, argc, argv);
     } else {
-      // check if this is a subcommand
-      if (!ctx->subcommands || ctx->num_subcommands == 0) {
+      // if we have no subcommands, continue to next argument.
+      if (ctx->num_subcommands == 0) {
         continue;
       }
 
@@ -578,7 +569,15 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[]) {
     }
 
     ++subcmdIndex;  // increment i to process next argument(value).
+
     if (flag != NULL) {
+      if (arg == NULL) {
+        fprintf(stderr, "Error: No value specified for flag %s\n", flag->name);
+        print_help(ctx, argv);
+        flag_destroy_context(ctx);
+        exit(EXIT_SUCCESS);
+      }
+
       parse_subcommand_flag(flag, argv[subcmdIndex]);
     }
   }
@@ -591,9 +590,11 @@ subcommand* parse_flags(flag_ctx* ctx, int argc, char* argv[]) {
     if (actualFlag.required && procFlag.value == NULL) {
       fprintf(stderr, "\n[ERROR]: Flag %s is required\n\n", actualFlag.name);
       print_help(ctx, argv);
+      flag_destroy_context(ctx);
       exit(EXIT_FAILURE);
     }
   }
+
   return subcmd;
 }
 
