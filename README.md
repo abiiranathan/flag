@@ -1,6 +1,6 @@
 # flag
 
-## flag implements a header-only C library for command line flag parsing.
+## flag implements a C library for command line flag parsing.
 
 The flag package accepts command line arguments in the form of -flag value or --arg value with custom validation and overflow/underflow checks.
 
@@ -30,15 +30,6 @@ flag may be specified with just a single dash (-) instead of the full --flag.
 
 > Warning: The package does not support specifying a flag multiple times. In this case, the last value will overwrite the previous ones.
 
-## Usage
-
-> You must define FLAG_IMPLEMENTATION in exactly one source file before including flag.h(as in stb-tyle libraries), like this:
-
-```c
-#define FLAG_IMPLEMENTATION
-#include "flag.h"
-```
-
 Subcommands are implemented by
 providing a subcommand struct to the **_parse_flags_** function.
 
@@ -54,7 +45,6 @@ That means global flags must come before subcommands.
 
 ```c
 
-#define FLAG_IMPLEMENTATION
 #include "flag.h"
 
 bool validate_int(const void* value) {
