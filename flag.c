@@ -205,7 +205,7 @@ void* FlagValue(flag* flags, int num_flags, const char* name) {
 }
 
 void* FlagValueCtx(flag_ctx* ctx, const char* name) {
-  for (int i = 0; i < ctx->num_flags; i++) {
+  for (size_t i = 0; i < ctx->num_flags; i++) {
     if (strcmp(ctx->flags[i].name, name) == 0) {
       return ctx->flags[i].value;
     }
@@ -563,7 +563,7 @@ subcommand* ParseFlags(flag_ctx* ctx, int argc, char* argv[]) {
     flag* flag = NULL;
 
     // find flag index matching next flag.
-    for (size_t j = 0; j < subcmd->num_flags; j++) {
+    for (int j = 0; j < subcmd->num_flags; j++) {
       if (strcmp(subcmd->flags[j].name, arg) == 0) {
         flag = &subcmd->flags[j];
         proccessed_flags[j] = *flag;
@@ -630,7 +630,7 @@ void PrintHelp(flag_ctx* ctx, char** argv) {
   // Print help message for available flags with aligned text
   printf("%s\n", argv[0]);
   printf("Global flags:\n");
-  for (int i = 0; i < ctx->num_flags; i++) {
+  for (size_t i = 0; i < ctx->num_flags; i++) {
     printf("  -%-*s --%s(%s) <%s>: %s\n\n", max_name_len_global, ctx->flags[i].name,
            ctx->flags[i].name, ctx->flags[i].required ? "Required" : "Optional",
            flagAsString(ctx->flags[i].type), ctx->flags[i].description);
@@ -640,7 +640,7 @@ void PrintHelp(flag_ctx* ctx, char** argv) {
   int max_name_len_subcmd = 0;
   int max_type_len_subcmd = 0;
 
-  for (int i = 0; i < ctx->num_subcommands; i++) {
+  for (size_t i = 0; i < ctx->num_subcommands; i++) {
     int name_len = maxNameLength(ctx->subcommands[i]->flags, ctx->subcommands[i]->num_flags);
     int type_len = maxTypeLength(ctx->subcommands[i]->flags, ctx->subcommands[i]->num_flags);
 
@@ -655,7 +655,7 @@ void PrintHelp(flag_ctx* ctx, char** argv) {
 
   // print subcommands and their flags
   printf("Subcommands:\n");
-  for (int i = 0; i < ctx->num_subcommands; i++) {
+  for (size_t i = 0; i < ctx->num_subcommands; i++) {
     printf("  %s: %s\n", ctx->subcommands[i]->name, ctx->subcommands[i]->description);
 
     for (int j = 0; j < ctx->subcommands[i]->num_flags; j++) {
