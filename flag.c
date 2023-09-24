@@ -195,15 +195,6 @@ static subcommand* find_subcommand(subcommand** subcmds, int num_commands, const
   return NULL;
 }
 
-static flag* find_flag(flag* flags, int num_flags, char** argv, int index) {
-  for (int i = 0; i < num_flags; i++) {
-    if (strcmp(flags[i].name, argv[index]) == 0) {
-      return &flags[i];
-    }
-  }
-  return NULL;
-}
-
 void* FlagValue(flag* flags, int num_flags, const char* name) {
   for (int i = 0; i < num_flags; i++) {
     if (strcmp(flags[i].name, name) == 0) {
