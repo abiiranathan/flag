@@ -6,7 +6,7 @@ The Flag Library is a command-line flag parsing library written in C. It provide
 
 ## Installation
 
-To use the Flag Library in your C project, simply include the `flag.h` header file in your source code and link against the library.
+To use the Flag Library in your C project, simply include the `flag.h` header file in your source code and link against the library(flag.c).
 
 ## Usage
 
@@ -14,81 +14,98 @@ The Flag Library provides a simple API for creating and managing flags and subco
 
 ### Creating a Flag Context
 
-To create a flag context, use the `flag_context_init` function:
+To create a flag context, use the `CreateFlagContext` function:
 
 ```c
-flag_ctx* ctx = flag_context_init();
+flag_ctx* ctx = CreateFlagContext();
 ```
 
-This function returns a pointer to a new flag context. You can add global flags and subcommands to this context using the `flag_add` and `flag_add_subcommand` functions.
+This function returns a pointer to a new flag context. You can add global flags and subcommands to this context using the `AddFlag` and `AddSubCmd` macros.
 
 ### Adding Global Flags
 
-To add a global flag to the flag context, use the `flag_add` function:
+To add a global flag to the flag context, use the `flag_add` macro:
 
 ```c
-flag_add(ctx, "name", &value, FLAG_TYPE, "description", required);
+AddFlag(ctx, .name = "int", .value = &integer_flag, .type = FLAG_INT, "An integer flag");
 ```
 
-This function adds a new flag to the flag context with the given name, value, type, description, and required status. The `value` parameter should be a pointer to the variable that will hold the flag value. The `type` parameter should be one of the supported flag types. The `required` parameter should be `true` if the flag is required, and `false` otherwise.
+This crazy macro adds a new flag to the flag context with the given name, value, type, and description. The `value` parameter should be a pointer to the variable that will hold the flag value. The `type` parameter should be one of the supported flag types. The `required` parameter should be `true` if the flag is required, and `false` otherwise.
+
+The default value for the `required` parameter is `false`.
+
+The default value for the `type` parameter is `FLAG_INT`. So, the above macro can be simplified to:
+
+```c
+AddFlag(ctx, .name = "int", .value = &integer_flag, "An integer flag");
+```
 
 ### Adding Subcommands
 
-To add a subcommand to the flag context, use the `flag_add_subcommand` function:
+To add a subcommand to the flag context, use the `AddSubCmd` macro:
 
 ```c
-subcommand* subcmd = flag_add_subcommand(ctx, "name", "description", handler, flag_capacity);
+// Second subcommand
+  subcommand *cmd2 = AddSubCmd(ctx, .name = "greet", .desc = "Greets the user", .handler = handle_greet, .capacity = 1);
+
+
 ```
 
-This function adds a new subcommand to the flag context with the given name, description, and handler function. The `handler` parameter should be a function pointer to the function that will handle the subcommand. The `flag_capacity` parameter should be the maximum number of flags that the subcommand can have.
+This macro adds a new subcommand to the flag context with the given name, description, and handler function. The `handler` parameter should be a function pointer to the function that will handle the subcommand. The `capacity` parameter should be the maximum number of flags that the subcommand can have. Default value is 0.
 
 ### Adding Flags to Subcommands
 
-To add a flag to a subcommand, use the `subcommand_add_flag` function:
+To add a flag to a subcommand, use the `AddSubCmdFlag` macro:
 
 ```c
-subcommand_add_flag(subcmd, "name", &value, FLAG_TYPE, "description", required, validator);
+char* name = "Guest";
+  AddSubCmdFlag(cmd2, .name = "name", .value = &name, .type = FLAG_STRING,
+                .desc = "The name of the user to greet", );
 ```
 
-This function adds a new flag to the subcommand with the given name, value, type, description, and required status. The `value` parameter should be a pointer to the variable that will hold the flag value. The `type` parameter should be one of the supported flag types. The `required` parameter should be `true` if the flag is required, and `false` otherwise. The `validator` parameter is an optional flag validator that can be used to validate the flag value.
+This macro adds a new flag to the subcommand with the given name, value, type, description, and required status. The `value` parameter should be a pointer to the variable that will hold the flag value. The `type` parameter should be one of the supported flag types. The `required` parameter should be `true` if the flag is required, and `false` otherwise.
+
+### Adding flag validation beyound required
+
+```c
+bool validate_int(const void* value) {
+  int* int_value = (int*)value;
+  return (*int_value >= 0 && *int_value <= 10);
+}
+
+// Add flags to subcommand
+flag* flag_count = AddSubCmdFlag(cmd1, .name = "count", .value = &count, .type = FLAG_INT,
+                        .desc = "The number of times to print hello", );
+
+SetValidator(flag_count, validate_int, "count must be between 0 and 10");
+```
 
 ### Parsing Command-Line Arguments
 
-To parse command-line arguments, use the `parse_flags` function:
+To parse command-line arguments, use the `ParseFlags` function:
 
 ```c
-subcommand* subcmd = parse_flags(ctx, argc, argv);
+subcommand* subcmd = ParseFlags(ctx, argc, argv);
 ```
 
-This function parses the command-line arguments and returns a pointer to the subcommand that was selected. If no subcommand was selected, this function returns `NULL`. You can use the `flag_value` and `flag_value_ctx` functions to retrieve the values of flags from the selected subcommand or the global flag context.
-
-### Performing Validation
-
-To perform validation on flag values, you can add a flag validator to a flag or subcommand using the `flag_add_with_validator` function:
-
-```c
-flag_validator validator = {validate_function, "error message"};
-flag_add_with_validator(ctx, "name", &value, FLAG_TYPE, "description", required, &validator);
-```
-
-This function adds a new flag to the flag context with the given name, value, type, description, and required status, and a flag validator that will be used to validate the flag value.
+This function parses the command-line arguments and returns a pointer to the subcommand that was selected. If no subcommand was selected, this function returns `NULL`. You can use the `FlagValue` and `FlagValueCtx` functions to retrieve the values of flags from the selected subcommand or the global flag context respectively.
 
 ### Printing Help Messages
 
-To print help messages for the global flags or subcommands, use the `print_help` function:
+To print help messages for the global flags or subcommands, use the `PrintHelp` function:
 
 ```c
-print_help(ctx, argv);
+PrintHelp(ctx, argv);
 ```
 
-This function prints a help message for the global flags or the selected subcommand, depending on the command-line arguments.
+This may not be neccessary as the library prints help messages automatically when the user enters invalid command-line arguments or when the user enters the `--help` flags.
 
 ### Cleaning Up
 
-To free the memory used by the flag context, use the `flag_destroy_context` function:
+To free the memory used by the flag context, use the `DestroyFlagContext` function:
 
 ```c
-flag_destroy_context(ctx);
+DestroyFlagContext(ctx);
 ```
 
 This function frees the memory used by the global flags and subcommands in the flag context.
