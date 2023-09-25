@@ -115,6 +115,8 @@ typedef struct flag_validator flag_validator;
 typedef struct flag flag;
 typedef struct subcommand subcommand;
 typedef struct flag_ctx flag_ctx;
+typedef bool (*validator)(const void* value);
+typedef void (*flag_handler)(FlagArgs args);
 
 // Parameter struct for flag creation.
 typedef struct flag_params {
@@ -127,10 +129,10 @@ typedef struct flag_params {
 
 // Parameter struct for subcommand creation.
 typedef struct subcmd_params {
-  const char* name;                // Name of subcommand
-  const char* desc;                // Description
-  void (*handler)(FlagArgs args);  // Subcommand handler
-  size_t capacity;                 // Maximum number of flags(capacity)
+  const char* name;      // Name of subcommand
+  const char* desc;      // Description
+  flag_handler handler;  // Subcommand handler
+  size_t capacity;       // Maximum number of flags(capacity)
 } subcmd_params;
 
 // Create a global flag context. Must be freed with DestroyFlagContext.
@@ -154,7 +156,7 @@ extern flag* _subcommand_add_flag(subcommand* subcmd, flag_params* params);
 #define AddSubCmdFlag(subcmd, ...)                                                                 \
   _subcommand_add_flag(subcmd, &(flag_params){.req = false, .type = FLAG_INT, __VA_ARGS__})
 
-void SetValidator(flag* flag, bool (*validator)(const void* value), const char* err_msg);
+void SetValidator(flag* flag, validator val, const char* err_msg);
 
 // Parses global flags subcommands and their flags and performs validation.
 subcommand* ParseFlags(flag_ctx* ctx, int argc, char* argv[]);

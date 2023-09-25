@@ -170,7 +170,7 @@ bool is_valid_integer(const char* str) {
 }
 
 // Print an error message and exit
-void fatalf(const char* format, ...) {
+void flag_fatalf(const char* format, ...) {
   va_list args;
   va_start(args, format);
   vfprintf(stderr, format, args);
@@ -244,7 +244,7 @@ static void parse_subcommand_flag(flag* flag, char* arg) {
     case FLAG_INT: {
       long long_value = strtol(arg, NULL, 10);
       if (errno == ERANGE) {
-        fatalf("Error: Integer overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Integer overflow for flag %s\n", flag->name);
       }
 
       *((int*)flag->value) = (int)long_value;
@@ -252,91 +252,91 @@ static void parse_subcommand_flag(flag* flag, char* arg) {
     case FLAG_SIZE_T: {
       unsigned long long_size_t_value = strtoul(arg, NULL, 10);
       if (errno == ERANGE) {
-        fatalf("Error: Size_t overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Size_t overflow for flag %s\n", flag->name);
       }
       *((size_t*)flag->value) = (size_t)long_size_t_value;
     } break;
     case FLAG_INT8: {
       intmax_t int_value = strtoimax(arg, NULL, 10);
       if (errno == ERANGE || int_value < INT8_MIN || int_value > INT8_MAX) {
-        fatalf("Error: Int8 overflow or underflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Int8 overflow or underflow for flag %s\n", flag->name);
       }
       *((int8_t*)flag->value) = (int8_t)int_value;
     } break;
     case FLAG_INT16: {
       intmax_t int_value = strtoimax(arg, NULL, 10);
       if (errno == ERANGE || int_value < INT16_MIN || int_value > INT16_MAX) {
-        fatalf("Error: Int16 overflow or underflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Int16 overflow or underflow for flag %s\n", flag->name);
       }
       *((int16_t*)flag->value) = (int16_t)int_value;
     } break;
     case FLAG_INT32: {
       intmax_t int_value = strtoimax(arg, NULL, 10);
       if (errno == ERANGE || int_value < INT32_MIN || int_value > INT32_MAX) {
-        fatalf("Error: Int32 overflow or underflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Int32 overflow or underflow for flag %s\n", flag->name);
       }
       *((int32_t*)flag->value) = (int32_t)int_value;
     } break;
     case FLAG_INT64: {
       intmax_t int_value = strtoimax(arg, NULL, 10);
       if (errno == ERANGE || int_value < INT64_MIN || int_value > INT64_MAX) {
-        fatalf("Error: Int64 overflow or underflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Int64 overflow or underflow for flag %s\n", flag->name);
       }
       *((int64_t*)flag->value) = (int64_t)int_value;
     } break;
     case FLAG_UINT8: {
       uintmax_t uint_value = strtoumax(arg, NULL, 10);
       if (errno == ERANGE || uint_value > UINT8_MAX) {
-        fatalf("Error: Uint8 overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Uint8 overflow for flag %s\n", flag->name);
       }
       *((uint8_t*)flag->value) = (uint8_t)uint_value;
     } break;
     case FLAG_UINT16: {
       uintmax_t uint_value = strtoumax(arg, NULL, 10);
       if (errno == ERANGE || uint_value > UINT16_MAX) {
-        fatalf("Error: Uint16 overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Uint16 overflow for flag %s\n", flag->name);
       }
       *((uint16_t*)flag->value) = (uint16_t)uint_value;
     } break;
     case FLAG_UINT32: {
       uintmax_t uint_value = strtoumax(arg, NULL, 10);
       if (errno == ERANGE || uint_value > UINT32_MAX) {
-        fatalf("Error: Uint32 overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Uint32 overflow for flag %s\n", flag->name);
       }
       *((uint32_t*)flag->value) = (uint32_t)uint_value;
     } break;
     case FLAG_UINT: {
       uintmax_t uint_value = strtoumax(arg, NULL, 10);
       if (errno == ERANGE || uint_value > UINT_MAX) {
-        fatalf("Error: Uint overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Uint overflow for flag %s\n", flag->name);
       }
       *((unsigned int*)flag->value) = (unsigned int)uint_value;
     } break;
     case FLAG_UINT64: {
       uintmax_t uint_value = strtoumax(arg, NULL, 10);
       if (errno == ERANGE || uint_value > UINT64_MAX) {
-        fatalf("Error: Uint64 overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Uint64 overflow for flag %s\n", flag->name);
       }
       *((uint64_t*)flag->value) = (uint64_t)uint_value;
     } break;
     case FLAG_UINTPTR: {
       uintmax_t uint_value = strtoumax(arg, NULL, 10);
       if (errno == ERANGE || uint_value > UINTPTR_MAX) {
-        fatalf("Error: Uint64 overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: Uint64 overflow for flag %s\n", flag->name);
       }
       *((uintptr_t*)flag->value) = (uintptr_t)uint_value;
     } break;
     case FLAG_FLOAT: {
       float float_value = strtof(arg, NULL);
       if (errno == ERANGE) {
-        fatalf("Error: float overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: float overflow for flag %s\n", flag->name);
       }
       *((float*)flag->value) = float_value;
     } break;
     case FLAG_DOUBLE: {
       double double_value = strtod(arg, NULL);
       if (errno == ERANGE) {
-        fatalf("Error: double overflow for flag %s\n", flag->name);
+        flag_fatalf("Error: double overflow for flag %s\n", flag->name);
       }
       *((double*)flag->value) = double_value;
     } break;
@@ -363,14 +363,14 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
           } else if (strcasecmp(argv[i], "false") == 0) {
             *((bool*)flags[j].value) = false;
           } else {
-            fatalf("Error: Invalid boolean value for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Invalid boolean value for flag %s\n", flags[j].name);
           }
         } break;
         case FLAG_INT: {
           validate_integer(flags, (const char**)argv, i, j);
           long long_value = strtol(argv[i], NULL, 10);
           if (errno == ERANGE) {
-            fatalf("Error: Integer overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Integer overflow for flag %s\n", flags[j].name);
           }
 
           *((int*)flags[j].value) = (int)long_value;
@@ -380,7 +380,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           unsigned long long_size_t_value = strtoul(argv[i], NULL, 10);
           if (errno == ERANGE) {
-            fatalf("Error: Size_t overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Size_t overflow for flag %s\n", flags[j].name);
           }
           *((size_t*)flags[j].value) = (size_t)long_size_t_value;
         } break;
@@ -389,7 +389,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           intmax_t int_value = strtoimax(argv[i], NULL, 10);
           if (errno == ERANGE || int_value < INT8_MIN || int_value > INT8_MAX) {
-            fatalf("Error: Int8 overflow or underflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Int8 overflow or underflow for flag %s\n", flags[j].name);
           }
           *((int8_t*)flags[j].value) = (int8_t)int_value;
         } break;
@@ -398,7 +398,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           intmax_t int_value = strtoimax(argv[i], NULL, 10);
           if (errno == ERANGE || int_value < INT16_MIN || int_value > INT16_MAX) {
-            fatalf("Error: Int16 overflow or underflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Int16 overflow or underflow for flag %s\n", flags[j].name);
           }
           *((int16_t*)flags[j].value) = (int16_t)int_value;
         } break;
@@ -407,7 +407,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           intmax_t int_value = strtoimax(argv[i], NULL, 10);
           if (errno == ERANGE || int_value < INT32_MIN || int_value > INT32_MAX) {
-            fatalf("Error: Int32 overflow or underflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Int32 overflow or underflow for flag %s\n", flags[j].name);
           }
           *((int32_t*)flags[j].value) = (int32_t)int_value;
         } break;
@@ -416,7 +416,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           intmax_t int_value = strtoimax(argv[i], NULL, 10);
           if (errno == ERANGE || int_value < INT64_MIN || int_value > INT64_MAX) {
-            fatalf("Error: Int64 overflow or underflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Int64 overflow or underflow for flag %s\n", flags[j].name);
           }
           *((int64_t*)flags[j].value) = (int64_t)int_value;
         } break;
@@ -425,7 +425,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           uintmax_t uint_value = strtoumax(argv[i], NULL, 10);
           if (errno == ERANGE || uint_value > UINT8_MAX) {
-            fatalf("Error: Uint8 overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Uint8 overflow for flag %s\n", flags[j].name);
           }
           *((uint8_t*)flags[j].value) = (uint8_t)uint_value;
         } break;
@@ -434,7 +434,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           uintmax_t uint_value = strtoumax(argv[i], NULL, 10);
           if (errno == ERANGE || uint_value > UINT16_MAX) {
-            fatalf("Error: Uint16 overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Uint16 overflow for flag %s\n", flags[j].name);
           }
           *((uint16_t*)flags[j].value) = (uint16_t)uint_value;
         } break;
@@ -443,7 +443,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           uintmax_t uint_value = strtoumax(argv[i], NULL, 10);
           if (errno == ERANGE || uint_value > UINT32_MAX) {
-            fatalf("Error: Uint32 overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Uint32 overflow for flag %s\n", flags[j].name);
           }
           *((uint32_t*)flags[j].value) = (uint32_t)uint_value;
         } break;
@@ -452,7 +452,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           uintmax_t uint_value = strtoumax(argv[i], NULL, 10);
           if (errno == ERANGE || uint_value > UINT_MAX) {
-            fatalf("Error: Uint overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Uint overflow for flag %s\n", flags[j].name);
           }
           *((unsigned int*)flags[j].value) = (unsigned int)uint_value;
         } break;
@@ -461,7 +461,7 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           uintmax_t uint_value = strtoumax(argv[i], NULL, 10);
           if (errno == ERANGE || uint_value > UINT64_MAX) {
-            fatalf("Error: Uint64 overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: Uint64 overflow for flag %s\n", flags[j].name);
           }
           *((uint64_t*)flags[j].value) = (uint64_t)uint_value;
         } break;
@@ -470,21 +470,21 @@ static void parse_flag_helper(flag* flags, int num_flags, int* iptr, int argc, c
 
           uintmax_t uint_value = strtoumax(argv[i], NULL, 10);
           if (errno == ERANGE || uint_value > UINTPTR_MAX) {
-            fatalf("Error: uintptr_t overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: uintptr_t overflow for flag %s\n", flags[j].name);
           }
           *((uintptr_t*)flags[j].value) = (uintptr_t)uint_value;
         } break;
         case FLAG_FLOAT: {
           float float_value = strtof(argv[i], NULL);
           if (errno == ERANGE) {
-            fatalf("Error: float overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: float overflow for flag %s\n", flags[j].name);
           }
           *((float*)flags[j].value) = float_value;
         } break;
         case FLAG_DOUBLE: {
           double double_value = strtod(argv[i], NULL);
           if (errno == ERANGE) {
-            fatalf("Error: double overflow for flag %s\n", flags[j].name);
+            flag_fatalf("Error: double overflow for flag %s\n", flags[j].name);
           }
           *((double*)flags[j].value) = double_value;
         } break;
